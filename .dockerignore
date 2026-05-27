@@ -1,0 +1,37 @@
+# 1. 排除版本控制 (体积大)
+.git
+.gitignore
+
+# 2. 排除 Python 编译缓存 (无用)
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# 3. 排除本地虚拟环境 (必须排除，Docker里会重新安装)
+.venv
+venv
+ENV
+
+# 4. 排除环境变量文件 (安全隐患！！！)
+.env
+.env.*
+
+# 5. 排除日志目录 (我们会用挂载卷，不需要把旧日志拷进去)
+logs/
+*.log
+
+temp_workspace
+test
+
+# 6. 排除 IDE 配置 (无用)
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 7. 排除 Docker 自身文件 (防止套娃)
+Dockerfile
+docker-compose.yml
+.dockerignore
+README.md

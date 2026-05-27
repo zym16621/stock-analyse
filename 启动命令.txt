@@ -1,0 +1,24 @@
+#1启动命令
+poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8008
+poetry run uvicorn app.main:app --reload --host 127.0.0.1 --port 8008
+
+#2.docker image创建命令
+docker build -t registry.cn-shenzhen.aliyuncs.com/speechx/llm-gateway:hkdev-1.0.6 .
+docker build --no-cache -t registry.cn-shenzhen.aliyuncs.com/speechx/llm-gateway:hkdev-1.0.8 .
+
+# 3. 推送
+docker push registry.cn-shenzhen.aliyuncs.com/speechx/llm-gateway:hkdev-1.0.8
+
+#4.获取目录结构
+tree app /F
+
+#5依赖管理
+poetry add xxx
+poetry remove xxx
+
+#6.使用poetry环境执行代码
+poetry run python .\doc_test.py
+
+
+# 4.拷贝代码
+scp -r app lingotask@10.13.219.125:/Users/lingotask/llm-gateway

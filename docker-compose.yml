@@ -1,0 +1,38 @@
+version: '3.8' # 建议显式声明版本号
+
+services:
+  web: 
+    image: ${DOCKER_REGISTRY:-registry.cn-shenzhen.aliyuncs.com/your-namespace}/${PROJECT_NAME:-myapp}:${IMAGE_TAG:-latest}
+    platform: linux/amd64
+    
+    # 容器名变量化，防止同主机多项目冲突。
+    container_name: ${PROJECT_NAME:-myapp}-web
+    network_mode: "host" 
+    restart: always
+    stop_grace_period: 610s
+    shm_size: '1g'
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"    
+    command: >
+      gunicorn app.main:app
+      -w 4
+      -k uvicorn.workers.UvicornWorker
+      --bind 0.0.0.0:${APP_PORT:-8000}
+      --timeout 600
+      --graceful-timeout 600
+      --keep-alive 120
+      --backlog 2048
+      --access-logfile -
+      --error-logfile -
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./logs:/app/logs
+    env_file:
+      - .env
