@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>量化定投数据看板 - 纯客观数据</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background-color: #f8fafc; color: #0f172a; line-height: 1.5; padding: 40px 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        header { margin-bottom: 32px; text-align: center; }
+        header h1 { font-size: 24px; font-weight: 700; color: #1e293b; margin-bottom: 8px; }
+        header p { font-size: 14px; color: #64748b; }
+        .strategy-badge { display: inline-block; background-color: #e2e8f0; color: #334155; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 6px; margin-top: 10px; }
+        .control-panel { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; text-align: center; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.05); margin-bottom: 24px; }
+        .fetch-btn { background-color: #2563eb; color: #ffffff; border: none; padding: 14px 28px; font-size: 15px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: all 0.2s; width: 100%; max-width: 320px; outline: none; }
+        .fetch-btn:hover { background-color: #1d4ed8; }
+        .fetch-btn:disabled { background-color: #93c5fd; cursor: not-allowed; }
+        .loading-container { display: none; text-align: center; padding: 40px 0; }
+        .spinner { width: 32px; height: 32px; border: 3px solid #e2e8f0; border-top-color: #2563eb; border-radius: 50%; display: inline-block; animation: spin 1s linear infinite; margin-bottom: 12px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .snapshot-panel { display: none; }
+        .card { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.05); margin-bottom: 24px; }
+        .card-header { border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 20px; font-size: 16px; font-weight: 600; color: #334155; display: flex; align-items: center; }
+        .card-header::before { content: ""; display: inline-block; width: 4px; height: 16px; background-color: #2563eb; margin-right: 8px; border-radius: 2px; }
+
+        /* CNN 卡片样式 */
+        .cnn-metric-box { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 16px; }
+        .cnn-main { display: flex; flex-direction: column; }
+        .cnn-value { font-size: 40px; font-weight: 800; color: #0f172a; line-height: 1; margin-bottom: 4px; }
+        .cnn-label { font-size: 13px; color: #64748b; font-weight: 500; }
+
+        .sparkline-container { display: flex; align-items: flex-end; height: 40px; gap: 4px; }
+        .sparkline-mini { height: 24px; gap: 2px; }
+        .sparkline-bar { width: 8px; background-color: #cbd5e1; border-radius: 2px 2px 0 0; transition: height 0.5s ease; position: relative; }
+        .sparkline-mini .sparkline-bar { width: 4px; }
+        .sparkline-bar:last-child { background-color: #475569; }
+
+        .sparkline-bar .tooltip { visibility: hidden; width: 60px; background-color: #1e293b; color: #fff; text-align: center; border-radius: 4px; padding: 4px 0; position: absolute; z-index: 1; bottom: 125%; left: 50%; margin-left: -30px; font-size: 10px; opacity: 0; transition: opacity 0.3s; }
+        .sparkline-bar:hover .tooltip { visibility: visible; opacity: 1; }
+
+        /* 资产卡片样式 */
+        .asset-row { padding: 16px 0; border-bottom: 1px dashed #f1f5f9; }
+        .asset-row:last-child { border-bottom: none; padding-bottom: 0; }
+        .asset-meta { font-size: 15px; font-weight: 600; color: #1e293b; margin-bottom: 16px; display: flex; justify-content: space-between; }
+        .asset-code { font-size: 12px; color: #94a3b8; font-family: monospace; margin-left: 6px; }
+
+        /* 三列估值指标布局 */
+        .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 8px; }
+        .metric-card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; }
+        .metric-title { font-size: 11px; color: #64748b; margin-bottom: 6px; font-weight: 500; }
+        .metric-current { font-size: 16px; font-weight: 700; color: #1e293b; }
+        .metric-percentile { font-size: 10px; color: #64748b; margin-top: 2px; display: flex; justify-content: space-between; }
+
+        .percentile-bar-track { height: 4px; background-color: #e2e8f0; border-radius: 2px; overflow: hidden; margin-top: 4px; }
+        .percentile-bar-fill { height: 100%; background-color: #475569; width: 0%; transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+
+        /* 指标趋势图 */
+        .metric-trend { margin-top: 6px; }
+        .metric-trend-title { font-size: 9px; color: #94a3b8; margin-bottom: 2px; }
+
+        .error-panel { display: none; background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 24px; margin-bottom: 24px; color: #dc2626; }
+
+        /* 系统执行纪律按钮 */
+        .directive-btn { display: block; width: 100%; background-color: #0f172a; color: #f1f5f9; border: 1px solid #334155; padding: 14px 24px; font-size: 14px; font-weight: 700; border-radius: 10px; cursor: pointer; transition: all 0.2s; letter-spacing: 1px; text-align: center; margin-bottom: 24px; }
+        .directive-btn:hover { background-color: #1e293b; border-color: #475569; }
+        .directive-btn-dot { display: inline-block; width: 8px; height: 8px; background-color: #ef4444; border-radius: 50%; margin-right: 10px; box-shadow: 0 0 8px rgba(239,68,68,0.6); animation: pulse-dot 2s ease-in-out infinite; vertical-align: middle; }
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        /* 弹窗遮罩 */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-overlay.active { display: flex; }
+
+        /* 弹窗内容 */
+        .directive-card { background-color: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 0; box-shadow: 0 8px 48px 0 rgba(0,0,0,0.4); overflow: hidden; color: #cbd5e1; max-width: 800px; width: 90%; max-height: 85vh; display: flex; flex-direction: column; }
+        .directive-header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; flex-shrink: 0; }
+        .directive-header-left { display: flex; align-items: center; gap: 10px; }
+        .directive-header-icon { width: 8px; height: 8px; background-color: #ef4444; border-radius: 50%; box-shadow: 0 0 8px rgba(239,68,68,0.6); animation: pulse-dot 2s ease-in-out infinite; }
+        .directive-header h2 { font-size: 14px; font-weight: 700; color: #f1f5f9; letter-spacing: 1px; text-transform: uppercase; margin: 0; }
+        .directive-header .directive-sub { font-size: 11px; color: #64748b; font-family: monospace; }
+        .directive-close { background: none; border: 1px solid #334155; color: #94a3b8; font-size: 18px; cursor: pointer; padding: 4px 10px; border-radius: 6px; line-height: 1; transition: all 0.2s; }
+        .directive-close:hover { background-color: #1e293b; color: #f1f5f9; border-color: #475569; }
+
+        .directive-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
+        .directive-section { margin-bottom: 20px; }
+        .directive-section:last-child { margin-bottom: 0; }
+        .directive-section-title { font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+        .directive-section-title::before { content: "\00bb"; color: #475569; }
+
+        .directive-rule { background-color: #1e293b; border-left: 3px solid #475569; padding: 10px 14px; margin-bottom: 6px; border-radius: 0 6px 6px 0; font-size: 13px; line-height: 1.7; }
+        .directive-rule.red-line { border-left-color: #ef4444; background-color: #1c1525; }
+        .directive-rule.red-line .rule-label { color: #ef4444; }
+        .directive-rule.amber-line { border-left-color: #f59e0b; background-color: #1c1a15; }
+        .directive-rule.amber-line .rule-label { color: #f59e0b; }
+        .rule-label { font-weight: 700; color: #e2e8f0; }
+
+        .directive-signal { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-right: 4px; }
+        .signal-red { background-color: rgba(239,68,68,0.15); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); }
+        .signal-green { background-color: rgba(34,197,94,0.15); color: #86efac; border: 1px solid rgba(34,197,94,0.3); }
+
+        .directive-cache-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .directive-cache-item { background-color: #1e293b; padding: 10px 12px; border-radius: 6px; }
+        .directive-cache-label { font-size: 11px; color: #64748b; font-weight: 600; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
+        .directive-cache-value { font-size: 12px; color: #cbd5e1; line-height: 1.6; }
+        .directive-cache-value code { background-color: #0f172a; color: #e2e8f0; padding: 1px 5px; border-radius: 3px; font-size: 11px; font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
+
+        .directive-footer { border-top: 1px solid #1e293b; padding: 10px 24px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .directive-footer-text { font-size: 10px; color: #475569; font-family: monospace; }
+
+        footer { margin-top: 32px; text-align: center; font-size: 11px; color: #94a3b8; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>量化定投数据看板</h1>
+        <p>客观时序快照 · 抵御交易噪音</p>
+        <span class="strategy-badge">数据来源: CNN + 理杏仁 API</span>
+    </header>
+
+    <div class="control-panel">
+        <button id="fetchBtn" class="fetch-btn" onclick="triggerFetch()">获取 7 日时序快照</button>
+    </div>
+
+    <div id="errorArea" class="error-panel">
+        <div id="errorText">数据获取失败，请稍后重试</div>
+    </div>
+
+    <div id="loadingArea" class="loading-container">
+        <div class="spinner"></div>
+        <div class="loading-text">正在并发拉取最近 7 天的 API 快照序列...</div>
+    </div>
+
+    <div id="snapshotPanel" class="snapshot-panel">
+
+        <!-- CNN 恐惧贪婪指数 -->
+        <div class="card">
+            <div class="card-header">模块 A：CNN 恐惧与贪婪指数 (近 7 天微趋势)</div>
+            <div class="cnn-metric-box">
+                <div class="cnn-main">
+                    <div id="cnnLatestValue" class="cnn-value">--</div>
+                    <div id="cnnLatestLabel" class="cnn-label">最新状态: --</div>
+                </div>
+                <div id="cnnSparkline" class="sparkline-container"></div>
+            </div>
+            <div class="percentile-bar-track"><div id="cnnBar" class="percentile-bar-fill"></div></div>
+        </div>
+
+        <!-- 核心资产估值分位点 -->
+        <div class="card">
+            <div class="card-header">模块 B：核心资产估值分位点 (近 7 天微趋势)</div>
+
+            <!-- 标普500 -->
+            <div class="asset-row">
+                <div class="asset-meta">
+                    <div>标普500 ETF <span class="asset-code">3195.HK</span></div>
+                    <div style="font-size: 13px; color: #64748b; font-weight: normal;">最新点位: <span id="sp500Price" style="color: #0f172a; font-weight: 600;">--</span></div>
+                </div>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-title">PE-TTM (盈利估值)</div>
+                        <div class="metric-current"><span id="sp500PeCurrent">--</span></div>
+                        <div class="metric-percentile"><span>10年分位点</span><span><span id="sp500PePos">--</span>%</span></div>
+                        <div class="percentile-bar-track"><div id="sp500PeBar" class="percentile-bar-fill"></div></div>
+                        <div class="metric-trend"><div class="metric-trend-title">7日趋势</div><div id="sp500PeTrend" class="sparkline-container sparkline-mini"></div></div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-title">PB (资产估值)</div>
+                        <div class="metric-current"><span id="sp500PbCurrent">--</span></div>
+                        <div class="metric-percentile"><span>10年分位点</span><span><span id="sp500PbPos">--</span>%</span></div>
+                        <div class="percentile-bar-track"><div id="sp500PbBar" class="percentile-bar-fill"></div></div>
+                        <div class="metric-trend"><div class="metric-trend-title">7日趋势</div><div id="sp500PbTrend" class="sparkline-container sparkline-mini"></div></div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-title">PS-TTM (营收估值)</div>
+                        <div class="metric-current"><span id="sp500PsCurrent">--</span></div>
+                        <div class="metric-percentile"><span>10年分位点</span><span><span id="sp500PsPos">--</span>%</span></div>
+                        <div class="percentile-bar-track"><div id="sp500PsBar" class="percentile-bar-fill"></div></div>
+                        <div class="metric-trend"><div class="metric-trend-title">7日趋势</div><div id="sp500PsTrend" class="sparkline-container sparkline-mini"></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 恒生科技 -->
+            <div class="asset-row">
+                <div class="asset-meta">
+                    <div>恒生科技 ETF <span class="asset-code">03067.HK</span></div>
+                    <div style="font-size: 13px; color: #64748b; font-weight: normal;">最新点位: <span id="hstechPrice" style="color: #0f172a; font-weight: 600;">--</span></div>
+                </div>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-title">PE-TTM (盈利估值)</div>
+                        <div class="metric-current"><span id="hstechPeCurrent">--</span></div>
+                        <div class="metric-percentile"><span>上市以来分位点</span><span><span id="hstechPePos">--</span>%</span></div>
+                        <div class="percentile-bar-track"><div id="hstechPeBar" class="percentile-bar-fill"></div></div>
+                        <div class="metric-trend"><div class="metric-trend-title">7日趋势</div><div id="hstechPeTrend" class="sparkline-container sparkline-mini"></div></div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-title">PB (资产估值)</div>
+                        <div class="metric-current"><span id="hstechPbCurrent">--</span></div>
+                        <div class="metric-percentile"><span>上市以来分位点</span><span><span id="hstechPbPos">--</span>%</span></div>
+                        <div class="percentile-bar-track"><div id="hstechPbBar" class="percentile-bar-fill"></div></div>
+                        <div class="metric-trend"><div class="metric-trend-title">7日趋势</div><div id="hstechPbTrend" class="sparkline-container sparkline-mini"></div></div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-title">PS-TTM (营收估值)</div>
+                        <div class="metric-current"><span id="hstechPsCurrent">--</span></div>
+                        <div class="metric-percentile"><span>上市以来分位点</span><span><span id="hstechPsPos">--</span>%</span></div>
+                        <div class="percentile-bar-track"><div id="hstechPsBar" class="percentile-bar-fill"></div></div>
+                        <div class="metric-trend"><div class="metric-trend-title">7日趋势</div><div id="hstechPsTrend" class="sparkline-container sparkline-mini"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 系统执行纪律按钮 -->
+        <button class="directive-btn" onclick="openDirectiveModal()">
+            <span class="directive-btn-dot"></span>系统执行纪律
+        </button>
+
+    </div>
+</div>
+
+<!-- 系统执行纪律弹窗 -->
+<div id="directiveModal" class="modal-overlay" onclick="closeDirectiveModal(event)">
+    <div class="directive-card" onclick="event.stopPropagation()">
+        <div class="directive-header">
+            <div class="directive-header-left">
+                <div class="directive-header-icon"></div>
+                <h2>系统执行纪律</h2>
+            </div>
+            <div style="display:flex; align-items:center; gap: 12px;">
+                <span class="directive-sub">System Directives v1.0</span>
+                <button class="directive-close" onclick="closeDirectiveModal()">&times;</button>
+            </div>
+        </div>
+        <div class="directive-body">
+
+            <div class="directive-section">
+                <div class="directive-section-title">I. 全局架构原则</div>
+                <div class="directive-rule red-line">
+                    <span class="rule-label">单一货币闭环</span> — 全链路（收入 ➡️ 蓄水池 ➡️ 资产）只使用 <code>HKD</code>，绝对禁止换汇美元，彻底消灭汇率点差与隐形摩擦。
+                </div>
+                <div class="directive-rule">
+                    <span class="rule-label">静默执行</span> — 不看新闻，不听分析，不猜涨跌。每月发薪日打开页面一次，按红绿灯执行，完成即关。
+                </div>
+            </div>
+
+            <div class="directive-section">
+                <div class="directive-section-title">II. 资金路由与估值策略</div>
+                <div class="directive-rule">
+                    <span class="rule-label">标普500 ETF <code>3195.HK</code> — 70% 份额</span><br>
+                    <span class="directive-signal signal-red">🔴 红灯</span> PB/PS 分位点 ≥ 90% → 停止买入，存量锁死，增量重定向至进攻蓄水池<br>
+                    <span class="directive-signal signal-green">🟢 绿灯</span> 分位点回落正常/低估 → 恢复 70% 定投
+                </div>
+                <div class="directive-rule">
+                    <span class="rule-label">恒生科技 ETF <code>03067.HK</code> — 30% 份额</span><br>
+                    <span class="directive-signal signal-green">🟢 绿灯</span> PE/PB/PS 分位点 ≤ 10% → 坚定执行 30% 买入，收集带血筹码
+                </div>
+            </div>
+
+            <div class="directive-section">
+                <div class="directive-section-title">III. 双活蓄水池管理</div>
+                <div class="directive-cache-grid">
+                    <div class="directive-cache-item">
+                        <div class="directive-cache-label">主干防御 · HSBC</div>
+                        <div class="directive-cache-value">
+                            灾备底仓，3-6 月生活刚需<br>
+                            <code>2800.HK</code> 月定投 ¥2000<br>
+                            闲置 → 货基 1.85% / 定存 2.2%<br>
+                            <span style="color:#f59e0b;">⚠ 禁止用此节点资金抄底</span>
+                        </div>
+                    </div>
+                    <div class="directive-cache-item">
+                        <div class="directive-cache-label">交易进攻 · Webull</div>
+                        <div class="directive-cache-value">
+                            L1 缓存，高频热钱<br>
+                            被阻断资金 → <code>03053.HK</code><br>
+                            收益 ≈ 2.05%，T+0/T+2<br>
+                            随时准备转化为核心资产
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="directive-section">
+                <div class="directive-section-title">IV. 物理交易红线</div>
+                <div class="directive-rule red-line">
+                    <span class="rule-label">禁止市价单</span> — 场内 ETF 买卖必须参考实时 IOPV，100% 使用限价单排队，绝不给做市商赚取盘口滑点。
+                </div>
+                <div class="directive-rule amber-line">
+                    <span class="rule-label">禁止买长债</span> — 蓄水池必须是零波动货币基金，坚决不买 TLT 等带有久期风险的长期债券。
+                </div>
+            </div>
+
+        </div>
+        <div class="directive-footer">
+            <span class="directive-footer-text">TRIGGER: 每月发薪日 · EXECUTE: 红绿灯 · EXIT: 完成即关</span>
+            <span class="directive-footer-text">STRICT MODE: ON</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API_URL = '/api/v1/investment/snapshot';
+
+    function createSparkline(containerId, dataArray, maxVal) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '';
+        dataArray.forEach(val => {
+            const bar = document.createElement('div');
+            bar.className = 'sparkline-bar';
+            const heightPercent = (val / maxVal) * 100;
+            bar.style.height = Math.max(heightPercent, 10) + '%';
+            const tooltip = document.createElement('span');
+            tooltip.className = 'tooltip';
+            tooltip.innerText = val.toFixed(1);
+            bar.appendChild(tooltip);
+            container.appendChild(bar);
+        });
+    }
+
+    function formatPercentile(value) {
+        if (value === null || value === undefined) return '--';
+        return value.toFixed(1);
+    }
+
+    function formatValue(value) {
+        if (value === null || value === undefined) return '--';
+        return value.toFixed(2);
+    }
+
+    function openDirectiveModal() {
+        document.getElementById('directiveModal').classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeDirectiveModal(event) {
+        if (event && event.target !== event.currentTarget) return;
+        document.getElementById('directiveModal').classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeDirectiveModal();
+    });
+
+    async function triggerFetch() {
+        const fetchBtn = document.getElementById('fetchBtn');
+        const loadingArea = document.getElementById('loadingArea');
+        const snapshotPanel = document.getElementById('snapshotPanel');
+        const errorArea = document.getElementById('errorArea');
+
+        fetchBtn.disabled = true;
+        fetchBtn.innerText = '正在并发连接 API ...';
+        loadingArea.style.display = 'block';
+        snapshotPanel.style.display = 'none';
+        errorArea.style.display = 'none';
+
+        try {
+            const response = await fetch(API_URL);
+            const result = await response.json();
+
+            if (result.errCode !== 0) {
+                throw new Error(result.errMsg || 'API返回错误');
+            }
+
+            const data = result.data;
+
+            // CNN 恐惧贪婪指数
+            const cnnHistory = data.cnn_fear_greed.history.map(p => p.value);
+            const currentCnn = data.cnn_fear_greed.latest_score;
+            const cnnRatingCn = data.cnn_fear_greed.latest_rating_cn;
+
+            document.getElementById('cnnLatestValue').innerText = currentCnn.toFixed(2);
+            document.getElementById('cnnLatestLabel').innerText = '最新状态: ' + cnnRatingCn;
+            document.getElementById('cnnBar').style.width = currentCnn + '%';
+            createSparkline('cnnSparkline', cnnHistory, 100);
+
+            // 标普500
+            const sp500 = data.sp500;
+
+            document.getElementById('sp500Price').innerText = sp500.latest_close_price ? formatValue(sp500.latest_close_price) + ' USD' : '--';
+            document.getElementById('sp500PeCurrent').innerText = formatValue(sp500.pe_current);
+            document.getElementById('sp500PePos').innerText = formatPercentile(sp500.pe_percentile);
+            document.getElementById('sp500PeBar').style.width = (sp500.pe_percentile || 0) + '%';
+            createSparkline('sp500PeTrend', sp500.pe_history.map(p => p.value), 100);
+
+            document.getElementById('sp500PbCurrent').innerText = formatValue(sp500.pb_current);
+            document.getElementById('sp500PbPos').innerText = formatPercentile(sp500.pb_percentile);
+            document.getElementById('sp500PbBar').style.width = (sp500.pb_percentile || 0) + '%';
+            createSparkline('sp500PbTrend', sp500.pb_history.map(p => p.value), 100);
+
+            document.getElementById('sp500PsCurrent').innerText = formatValue(sp500.ps_current);
+            document.getElementById('sp500PsPos').innerText = formatPercentile(sp500.ps_percentile);
+            document.getElementById('sp500PsBar').style.width = (sp500.ps_percentile || 0) + '%';
+            createSparkline('sp500PsTrend', sp500.ps_history.map(p => p.value), 100);
+
+            // 恒生科技
+            const hstech = data.hstech;
+
+            document.getElementById('hstechPrice').innerText = hstech.latest_close_price ? formatValue(hstech.latest_close_price) + ' HKD' : '--';
+            document.getElementById('hstechPeCurrent').innerText = formatValue(hstech.pe_current);
+            document.getElementById('hstechPePos').innerText = formatPercentile(hstech.pe_percentile);
+            document.getElementById('hstechPeBar').style.width = (hstech.pe_percentile || 0) + '%';
+            createSparkline('hstechPeTrend', hstech.pe_history.map(p => p.value), 100);
+
+            document.getElementById('hstechPbCurrent').innerText = formatValue(hstech.pb_current);
+            document.getElementById('hstechPbPos').innerText = formatPercentile(hstech.pb_percentile);
+            document.getElementById('hstechPbBar').style.width = (hstech.pb_percentile || 0) + '%';
+            createSparkline('hstechPbTrend', hstech.pb_history.map(p => p.value), 100);
+
+            document.getElementById('hstechPsCurrent').innerText = formatValue(hstech.ps_current);
+            document.getElementById('hstechPsPos').innerText = formatPercentile(hstech.ps_percentile);
+            document.getElementById('hstechPsBar').style.width = (hstech.ps_percentile || 0) + '%';
+            createSparkline('hstechPsTrend', hstech.ps_history.map(p => p.value), 100);
+
+            loadingArea.style.display = 'none';
+            snapshotPanel.style.display = 'block';
+            fetchBtn.disabled = false;
+            fetchBtn.innerText = '再次获取 7 日时序快照';
+
+        } catch (error) {
+            console.error('Fetch error:', error);
+            loadingArea.style.display = 'none';
+            errorArea.style.display = 'block';
+            document.getElementById('errorText').innerText = '数据获取失败: ' + error.message;
+            fetchBtn.disabled = false;
+            fetchBtn.innerText = '重新获取 7 日时序快照';
+        }
+    }
+</script>
+
+</body>
+</html>

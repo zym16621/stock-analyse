@@ -5,17 +5,19 @@ from fastapi.responses import FileResponse
 
 ui_router = APIRouter(tags=["UI"])
 
-@ui_router.get("/prompt-studio", summary="Prompt 可视化工作台", include_in_schema=False)
-async def serve_prompt_studio():
+# 项目根目录 (app 目录的父目录)
+BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent
+
+
+@ui_router.get("/investment-dashboard", summary="量化定投数据看板", include_in_schema=False)
+async def serve_investment_dashboard():
     """
-    返回静态的前端 HTML 页面。
-    注意：include_in_schema=False 可以让这个接口不在 Swagger UI (docs) 里显示，
-    保持纯净的 API 文档。
+    返回量化定投数据看板 HTML 页面。
+    访问地址: http://localhost:8168/ui/investment-dashboard
     """
-    base_dir = Path(__file__).resolve().parent.parent.parent.parent
-    html_path = base_dir / "static" / "index.html"
+    html_path = BASE_DIR / "app" / "static" / "quant_investment_dashboard.html"
 
     if not html_path.exists():
-        raise HTTPException(status_code=404, detail="Frontend UI not found. Please check app/static/index.html")
+        raise HTTPException(status_code=404, detail="Dashboard UI not found. Please check static/quant_investment_dashboard.html")
 
     return FileResponse(html_path)

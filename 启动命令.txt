@@ -1,6 +1,6 @@
 #1启动命令
-poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8008
-poetry run uvicorn app.main:app --reload --host 127.0.0.1 --port 8008
+poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8168
+poetry run uvicorn app.main:app --reload --host 127.0.0.1 --port 8168
 
 #2.docker image创建命令
 docker build -t registry.cn-shenzhen.aliyuncs.com/speechx/llm-gateway:hkdev-1.0.6 .

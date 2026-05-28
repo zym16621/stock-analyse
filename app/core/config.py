@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # --- 基础配置 ---
     API_V1_STR: str = "/api/v1"
-    PROJECT_NAME: str = "my-new-app"
+    PROJECT_NAME: str = "stock-analyse"
     
     # --- 1. 数据库配置 (必须在 .env 中提供) ---
     DB_HOST: str
@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     
     # --- 3. 本服务注册信息 ---
     # 这个名字要和 Gateway 配置的 lb://service-name 一致
-    SERVICE_NAME: str = "my-new-app"      
+    SERVICE_NAME: str = "stock-analyse"      
     SERVICE_PORT: int = 8008
     SERVICE_GROUP: str = "DEFAULT_GROUP"
 
@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     GATEWAY_AUTH_TOKEN: Optional[str] = None
 
     PRODUCT_IP: Optional[str] = None
+
+    LIXINGER_TOKEN: Optional[str] = None
 
     # --- 4. 组装 DATABASE_URL ---
     @property

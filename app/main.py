@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 import httpx
 import jinja2
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
@@ -45,26 +46,40 @@ async def lifespan(app: FastAPI):
         timeout=httpx.Timeout(300.0, connect=10.0),
         limits=limits
     )
-    logger.info("LLM Gateway HTTP/2 Client Initialized.")
+    logger.info("Stock Analyse Service HTTP/2 Client Initialized.")
 
     try:
         yield
     finally:              
         await app.state.http_client.aclose()
-        logger.info("LLM Gateway HTTP/2 Client Closed.")
+        logger.info("Stock Analyse Service HTTP/2 Client Closed.")
         logger.info("Application shutting down...")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     lifespan=lifespan
 )
+
+# CORS 配置：允许本地跨域调用
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 允许所有来源，便于本地开发
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.add_middleware(LogMiddleware)
 
 
 # ✅ 注册全局异常处理 (建议放在中间件之后，路由之前)
 register_exception_handlers(app)
 
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+# 静态文件挂载 - 使用项目根目录下的 static 目录
+from pathlib import Path
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # 注册路由
 app.include_router(api_router, prefix=settings.API_V1_STR)

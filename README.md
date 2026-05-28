@@ -1,6 +1,6 @@
-# Python 模板项目
+# Python 股票分析项目
 
-基于 FastAPI 的 模板项目，提供异步 MySQL 数据库访问、Redis Pub/Sub 实现的 SSE 流式推送，以及模块化的 API 路由架构。
+基于 FastAPI 的 股票分析项目。
 
 ## 技术栈
 
@@ -50,10 +50,10 @@ RUN_MODE=local  # 启用调试端点
 
 ```bash
 # 开发模式（自动重载）
-poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8008
+poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8168
 
 # 生产模式
-poetry run uvicorn app.main:app --host 0.0.0.0 --port 8008 --workers 4
+poetry run uvicorn app.main:app --host 0.0.0.0 --port 8168 --workers 4
 ```
 
 ## 项目结构

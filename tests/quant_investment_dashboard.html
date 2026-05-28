@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>量化定投数据抓取终端 - 趋势增强版</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background-color: #f8fafc; color: #0f172a; line-height: 1.5; padding: 40px 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        header { margin-bottom: 32px; text-align: center; }
+        header h1 { font-size: 24px; font-weight: 700; color: #1e293b; margin-bottom: 8px; }
+        header p { font-size: 14px; color: #64748b; }
+        .strategy-badge { display: inline-block; background-color: #e2e8f0; color: #334155; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 6px; margin-top: 10px; }
+        .control-panel { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; text-align: center; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.05); margin-bottom: 24px; }
+        .fetch-btn { background-color: #2563eb; color: #ffffff; border: none; padding: 14px 28px; font-size: 15px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: all 0.2s; width: 100%; max-width: 320px; outline: none; }
+        .fetch-btn:hover { background-color: #1d4ed8; }
+        .fetch-btn:disabled { background-color: #93c5fd; cursor: not-allowed; }
+        .loading-container { display: none; text-align: center; padding: 40px 0; }
+        .spinner { width: 32px; height: 32px; border: 3px solid #e2e8f0; border-top-color: #2563eb; border-radius: 50%; display: inline-block; animation: spin 1s linear infinite; margin-bottom: 12px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .snapshot-panel { display: none; }
+        .card { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.05); margin-bottom: 24px; }
+        .card-header { border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 20px; font-size: 16px; font-weight: 600; color: #334155; display: flex; align-items: center; }
+        .card-header::before { content: ""; display: inline-block; width: 4px; height: 16px; background-color: #2563eb; margin-right: 8px; border-radius: 2px; }
+        
+        /* 核心指标展示区 */
+        .primary-metric-box { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 16px; }
+        .metric-main { display: flex; flex-direction: column; }
+        .metric-value-huge { font-size: 40px; font-weight: 800; color: #0f172a; line-height: 1; margin-bottom: 4px; }
+        .metric-label { font-size: 13px; color: #64748b; font-weight: 500; }
+        
+        /* 🔥 核心新增：Sparkline (微型趋势图) 样式 */
+        .sparkline-container { display: flex; align-items: flex-end; height: 40px; gap: 4px; }
+        .sparkline-bar { width: 8px; background-color: #cbd5e1; border-radius: 2px 2px 0 0; transition: height 0.5s ease; position: relative; }
+        .sparkline-bar:last-child { background-color: #475569; /* 突出最新一天 */ }
+        
+        /* 悬浮提示 */
+        .sparkline-bar .tooltip { visibility: hidden; width: 60px; background-color: #1e293b; color: #fff; text-align: center; border-radius: 4px; padding: 4px 0; position: absolute; z-index: 1; bottom: 125%; left: 50%; margin-left: -30px; font-size: 10px; opacity: 0; transition: opacity 0.3s; }
+        .sparkline-bar:hover .tooltip { visibility: visible; opacity: 1; }
+
+        .asset-row { padding: 16px 0; border-bottom: 1px dashed #f1f5f9; }
+        .asset-row:last-child { border-bottom: none; padding-bottom: 0; }
+        .asset-meta { font-size: 15px; font-weight: 600; color: #1e293b; margin-bottom: 16px; display: flex; justify-content: space-between; }
+        .asset-code { font-size: 12px; color: #94a3b8; font-family: monospace; margin-left: 6px; }
+        
+        /* 进度条 */
+        .percentile-container { margin-top: 12px; }
+        .percentile-label { display: flex; justify-content: space-between; font-size: 12px; color: #64748b; margin-bottom: 4px; }
+        .percentile-bar-track { height: 8px; background-color: #f1f5f9; border-radius: 4px; overflow: hidden; }
+        .percentile-bar-fill { height: 100%; background-color: #475569; width: 0%; transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+        
+        footer { margin-top: 32px; text-align: center; font-size: 11px; color: #94a3b8; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>量化定投数据抓取终端</h1>
+        <p>客观时序快照 · 抵御交易噪音</p>
+    </header>
+
+    <div class="control-panel">
+        <button id="fetchBtn" class="fetch-btn" onclick="triggerFetch()">执行全网时序数据抓取</button>
+    </div>
+
+    <div id="loadingArea" class="loading-container">
+        <div class="spinner"></div>
+        <div class="loading-text">正在并发拉取最近 7 天的 API 快照序列...</div>
+    </div>
+
+    <div id="snapshotPanel" class="snapshot-panel">
+        
+        <div class="card">
+            <div class="card-header">模块 A：CNN 恐惧与贪婪指数 (近 7 天微趋势)</div>
+            <div class="primary-metric-box">
+                <div class="metric-main">
+                    <div id="cnnLatestValue" class="metric-value-huge">--</div>
+                    <div id="cnnLatestLabel" class="metric-label">最新状态: --</div>
+                </div>
+                <div id="cnnSparkline" class="sparkline-container"></div>
+            </div>
+            <div class="percentile-container">
+                <div class="percentile-bar-track"><div id="cnnBar" class="percentile-bar-fill"></div></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">模块 B：核心资产 10 年 PE 估值分位点 (近 7 天微趋势)</div>
+            
+            <div class="asset-row">
+                <div class="asset-meta">
+                    <div>标普500 ETF <span class="asset-code">3195.HK</span></div>
+                    <div style="font-size: 13px; color: #64748b; font-weight: normal;">最新现价: <span id="asset1Price" style="color: #0f172a; font-weight: 600;">--</span></div>
+                </div>
+                <div class="primary-metric-box">
+                    <div class="metric-main">
+                        <div style="display:flex; align-items:baseline;">
+                            <div id="asset1PercentileText" class="metric-value-huge" style="font-size: 32px;">--</div>
+                            <span style="font-size: 16px; font-weight: 700; margin-left: 2px;">%</span>
+                        </div>
+                        <div class="metric-label">最新 10 年 PE 历史分位点</div>
+                    </div>
+                    <div id="asset1Sparkline" class="sparkline-container"></div>
+                </div>
+                <div class="percentile-container">
+                    <div class="percentile-bar-track"><div id="asset1Bar" class="percentile-bar-fill"></div></div>
+                </div>
+            </div>
+
+            <div class="asset-row">
+                <div class="asset-meta">
+                    <div>恒生科技 ETF <span class="asset-code">03067.HK</span></div>
+                    <div style="font-size: 13px; color: #64748b; font-weight: normal;">最新现价: <span id="asset2Price" style="color: #0f172a; font-weight: 600;">--</span></div>
+                </div>
+                <div class="primary-metric-box">
+                    <div class="metric-main">
+                        <div style="display:flex; align-items:baseline;">
+                            <div id="asset2PercentileText" class="metric-value-huge" style="font-size: 32px;">--</div>
+                            <span style="font-size: 16px; font-weight: 700; margin-left: 2px;">%</span>
+                        </div>
+                        <div class="metric-label">最新历史 PE 历史分位点</div>
+                    </div>
+                    <div id="asset2Sparkline" class="sparkline-container"></div>
+                </div>
+                <div class="percentile-container">
+                    <div class="percentile-bar-track"><div id="asset2Bar" class="percentile-bar-fill"></div></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    // 🔥 核心新增的 JS 方法：用于将 Python 后端传来的数组，渲染成纯 CSS 小柱状图
+    function createSparkline(containerId, dataArray, maxVal) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = ''; // 清空容器
+        dataArray.forEach(val => {
+            const bar = document.createElement('div');
+            bar.className = 'sparkline-bar';
+            
+            // 计算高度比例
+            const heightPercent = (val / maxVal) * 100;
+            bar.style.height = Math.max(heightPercent, 10) + '%'; // 至少给10%高度避免太小看不见
+            
+            // 添加鼠标悬浮查看具体数值的功能
+            const tooltip = document.createElement('span');
+            tooltip.className = 'tooltip';
+            tooltip.innerText = val.toFixed(1);
+            bar.appendChild(tooltip);
+            
+            container.appendChild(bar);
+        });
+    }
+
+    function triggerFetch() {
+        const fetchBtn = document.getElementById('fetchBtn');
+        const loadingArea = document.getElementById('loadingArea');
+        const snapshotPanel = document.getElementById('snapshotPanel');
+
+        fetchBtn.disabled = true;
+        fetchBtn.innerText = '正在并发连接 API ...';
+        loadingArea.style.display = 'block';
+        snapshotPanel.style.display = 'none';
+
+        setTimeout(() => {
+            // 🔥 这里模拟你的 Python 脚本返回的时序数组 (最近 7 天)
+            const cnnHistory = [65, 63, 62, 60, 64, 66, 68];
+            const asset1History = [85.1, 84.8, 85.0, 84.5, 86.2, 87.1, 87.5]; // 标普500偏高位
+            const asset2History = [20.5, 20.1, 19.8, 20.3, 21.0, 21.5, 22.1]; // 恒生科技偏低位
+
+            // 取数组最后一天的数据作为主数值渲染
+            const currentCnn = cnnHistory[cnnHistory.length - 1];
+            const currentAsset1 = asset1History[asset1History.length - 1];
+            const currentAsset2 = asset2History[asset2History.length - 1];
+
+            document.getElementById('cnnLatestValue').innerText = currentCnn;
+            document.getElementById('cnnLatestLabel').innerText = '最新状态: ' + (currentCnn > 75 ? '极度贪婪' : '贪婪');
+            document.getElementById('cnnBar').style.width = currentCnn + '%';
+            createSparkline('cnnSparkline', cnnHistory, 100);
+
+            document.getElementById('asset1Price').innerText = '18.52 HKD';
+            document.getElementById('asset1PercentileText').innerText = currentAsset1;
+            document.getElementById('asset1Bar').style.width = currentAsset1 + '%';
+            createSparkline('asset1Sparkline', asset1History, 100);
+
+            document.getElementById('asset2Price').innerText = '3.85 HKD';
+            document.getElementById('asset2PercentileText').innerText = currentAsset2;
+            document.getElementById('asset2Bar').style.width = currentAsset2 + '%';
+            createSparkline('asset2Sparkline', asset2History, 100);
+
+            loadingArea.style.display = 'none';
+            snapshotPanel.style.display = 'block';
+            fetchBtn.disabled = false;
+            fetchBtn.innerText = '再次获取 7 日时序快照';
+        }, 1200);
+    }
+</script>
+
+</body>
+</html>
