@@ -9,12 +9,14 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "stock-analyse"
     
-    # --- 1. 数据库配置 (必须在 .env 中提供) ---
-    DB_HOST: str
-    DB_PORT: int
-    DB_USER: str
-    DB_PASSWORD: str
-    DB_NAME: str
+    # --- 1. 数据库配置 (极简模式默认禁用，开启时必填) ---
+    ENABLE_DB: bool = False
+    ENABLE_REDIS: bool = False
+    DB_HOST: Optional[str] = None
+    DB_PORT: Optional[int] = None
+    DB_USER: Optional[str] = None
+    DB_PASSWORD: Optional[str] = None
+    DB_NAME: Optional[str] = None
 
     # --- 2. Nacos 配置 (支持 .env 覆盖，提供默认值方便本地开发) ---
 
@@ -60,28 +62,32 @@ class Settings(BaseSettings):
 
     LIXINGER_TOKEN: Optional[str] = None
 
+    # --- 微信 dispatch 鉴权 (Node bot 与 Python 共享) ---
+    WECHAT_DISPATCH_TOKEN: Optional[str] = None
+
     # --- 4. 组装 DATABASE_URL ---
     @property
     def DATABASE_URL(self) -> str:
         """
         自动组装 SQLAlchemy 连接字符串
         格式: mysql+pymysql://user:password@host:port/dbname
+        仅在 ENABLE_DB=True 时调用方有意义
         """
-        user = quote_plus(self.DB_USER)
-        password = quote_plus(self.DB_PASSWORD)
-        
+        user = quote_plus(self.DB_USER or "")
+        password = quote_plus(self.DB_PASSWORD or "")
+
         return (
             f"mysql+pymysql://{user}:{password}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         )
-    
+
     @property
     def ASYNC_DATABASE_URL(self) -> str:
         """
         异步连接字符串 (用于 aiomysql)
         """
-        user = quote_plus(self.DB_USER)
-        password = quote_plus(self.DB_PASSWORD)
+        user = quote_plus(self.DB_USER or "")
+        password = quote_plus(self.DB_PASSWORD or "")
         return (
             f"mysql+aiomysql://{user}:{password}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"

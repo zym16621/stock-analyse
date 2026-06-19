@@ -24,15 +24,18 @@ async def lifespan(app: FastAPI):
     setup_logging()
     logger.info("Application starting up...")
 
-    # 生产环境安全验证
+    # 生产环境安全验证（仅在启用对应组件时校验密码）
     if settings.RUN_MODE == "prod":
-        if not settings.REDIS_PASSWORD:
-            logger.error("❌ 生产环境必须配置Redis密码，请检查 .env 文件中的 REDIS_PASSWORD")
+        if settings.ENABLE_REDIS and not settings.REDIS_PASSWORD:
+            logger.error("❌ 生产环境启用 Redis 必须配置密码，请检查 .env 文件中的 REDIS_PASSWORD")
             raise ValueError("生产环境Redis密码未配置，禁止启动")
-        if not settings.DB_PASSWORD:
-            logger.error("❌ 生产环境必须配置数据库密码，请检查 .env 文件中的 DB_PASSWORD")
+        if settings.ENABLE_DB and not settings.DB_PASSWORD:
+            logger.error("❌ 生产环境启用 DB 必须配置密码，请检查 .env 文件中的 DB_PASSWORD")
             raise ValueError("生产环境数据库密码未配置，禁止启动")
-        logger.info("✅ 生产环境安全配置验证通过")
+        logger.info(
+            f"✅ 生产环境安全配置验证通过 (ENABLE_DB={settings.ENABLE_DB}, "
+            f"ENABLE_REDIS={settings.ENABLE_REDIS})"
+        )
 
     # 针对 LLM 长耗时/流式场景的连接池配置
     limits = httpx.Limits(

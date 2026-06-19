@@ -39,6 +39,20 @@ class InvestmentSnapshotData(BaseModel):
     cnn_fear_greed: CNNFearGreedData
     sp500: AssetFundamentalData
     hstech: AssetFundamentalData
+    sse: "SSEIndexData"
+
+
+class SSEIndexData(BaseModel):
+    """上证指数实时行情（来源：新浪财经）"""
+    name: Optional[str] = None
+    current: Optional[float] = None
+    prev_close: Optional[float] = None
+    change_amt: Optional[float] = None
+    change_pct: Optional[float] = None
+    volume: Optional[float] = None  # 单位：手
+
+
+InvestmentSnapshotData.model_rebuild()
 
 
 class InvestmentSnapshotResponse(BaseModel):

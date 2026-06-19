@@ -28,19 +28,13 @@ RUN poetry config virtualenvs.create false \
 COPY . /app
 
 # 8. 暴露端口
-EXPOSE 8008
+EXPOSE 8168
 
 # 9. 启动命令
-#CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8005", "--workers", "4"]
-
-# 使用 gunicorn
-#CMD ["gunicorn", "main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8005"]
-
-#
 CMD ["gunicorn", "app.main:app", \
      "-w", "4", \
      "-k", "uvicorn.workers.UvicornWorker", \
-     "--bind", "0.0.0.0:8008", \
+     "--bind", "0.0.0.0:8168", \
      "--timeout", "180", \
      "--access-logfile", "-", \
      "--error-logfile", "-"]

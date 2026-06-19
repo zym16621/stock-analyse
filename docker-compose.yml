@@ -1,34 +1,30 @@
-version: '3.8' # 建议显式声明版本号
+version: '3.8'
 
 services:
-  web: 
-    image: ${DOCKER_REGISTRY:-registry.cn-shenzhen.aliyuncs.com/your-namespace}/${PROJECT_NAME:-myapp}:${IMAGE_TAG:-latest}
+  stock-analyse:
+    image: ${DOCKER_REGISTRY:-registry.cn-shenzhen.aliyuncs.com/your-namespace}/${PROJECT_NAME:-stock-analyse}:${IMAGE_TAG:-latest}
     platform: linux/amd64
-    
-    # 容器名变量化，防止同主机多项目冲突。
-    container_name: ${PROJECT_NAME:-myapp}-web
-    network_mode: "host" 
+    container_name: stock-analyse
     restart: always
-    stop_grace_period: 610s
-    shm_size: '1g'
+    stop_grace_period: 60s
+    shm_size: '512m'
     deploy:
       resources:
         limits:
-          memory: 4g
+          memory: 2g
     logging:
       driver: "json-file"
       options:
         max-size: "100m"
-        max-file: "3"    
+        max-file: "3"
     command: >
       gunicorn app.main:app
-      -w 4
+      -w 2
       -k uvicorn.workers.UvicornWorker
-      --bind 0.0.0.0:${APP_PORT:-8000}
-      --timeout 600
-      --graceful-timeout 600
-      --keep-alive 120
-      --backlog 2048
+      --bind 0.0.0.0:8168
+      --timeout 120
+      --graceful-timeout 60
+      --keep-alive 60
       --access-logfile -
       --error-logfile -
     volumes:
@@ -36,3 +32,30 @@ services:
       - ./logs:/app/logs
     env_file:
       - .env
+    ports:
+      - "127.0.0.1:8168:8168"   # 仅本机访问，避免公网暴露 dispatch 接口
+    networks:
+      - stock-net
+
+  wechat-bot:
+    build:
+      context: ./wechat-bot
+    container_name: wechat-bot
+    restart: always
+    depends_on:
+      - stock-analyse
+    environment:
+      STOCK_ANALYSE_URL: http://stock-analyse:8168
+      DISPATCH_TOKEN: ${WECHAT_DISPATCH_TOKEN}
+      TZ: Asia/Shanghai
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./wechat-bot/data:/root/.openclaw   # 登录态持久化
+    stdin_open: true   # 首次扫码登录需要交互
+    tty: true
+    networks:
+      - stock-net
+
+networks:
+  stock-net:
+    driver: bridge

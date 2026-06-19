@@ -11,6 +11,7 @@ from app.schemas.investment import (
     CNNFearGreedData,
     AssetFundamentalData,
     InvestmentSnapshotData,
+    SSEIndexData,
 )
 
 
@@ -208,6 +209,62 @@ async def fetch_cnn_fear_greed(http_client: httpx.AsyncClient) -> CNNFearGreedDa
         )
 
 
+async def fetch_sse_index(http_client: httpx.AsyncClient) -> SSEIndexData:
+    """
+    获取上证指数 (sh000001) 实时行情，来源：新浪财经
+    返回 GBK 编码文本，格式如：
+    var hq_str_sh000001="上证指数,3204.5,3210.7,3198.4,...";
+    字段索引：1=名称, 2=今开, 3=昨收, 4=当前价, 5=最高, 6=最低, ..., 9=成交量(手)
+    注意：sina 的字段顺序与香港/美股略有差异，下标须以指数为准
+    """
+    url = "https://hq.sinajs.cn/list=sh000001"
+    headers = {
+        "Referer": "https://finance.sina.com.cn",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    }
+
+    try:
+        response = await http_client.get(url, headers=headers, timeout=10.0)
+        response.raise_for_status()
+        text = response.content.decode("gbk", errors="ignore")
+
+        if "=" not in text or '"' not in text:
+            logger.warning(f"SSE index unexpected format: {text[:80]}")
+            return SSEIndexData()
+
+        payload = text.split('"', 2)[1]
+        parts = payload.split(",")
+        if len(parts) < 10:
+            logger.warning(f"SSE index field count too short: {len(parts)}")
+            return SSEIndexData()
+
+        # 索引参考：0=名称, 1=今开价, 2=昨收价, 3=当前价, 4=最高, 5=最低, 8=成交量(手)
+        name = parts[0] or "上证指数"
+        prev_close = float(parts[2]) if parts[2] else None
+        current = float(parts[3]) if parts[3] else None
+        volume = float(parts[8]) if len(parts) > 8 and parts[8] else None
+
+        change_amt = None
+        change_pct = None
+        if current is not None and prev_close not in (None, 0):
+            change_amt = round(current - prev_close, 2)
+            change_pct = round((current - prev_close) / prev_close * 100, 2)
+
+        return SSEIndexData(
+            name=name,
+            current=current,
+            prev_close=prev_close,
+            change_amt=change_amt,
+            change_pct=change_pct,
+            volume=volume,
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to fetch SSE index: {e}")
+        return SSEIndexData()
+
+
 async def get_investment_snapshot(http_client: httpx.AsyncClient) -> InvestmentSnapshotData:
     """
     并发抓取三个数据源，返回聚合后的投资快照数据
@@ -217,9 +274,10 @@ async def get_investment_snapshot(http_client: httpx.AsyncClient) -> InvestmentS
     sp500_task = fetch_sp500_fundamental(http_client)
     hstech_task = fetch_hstech_fundamental(http_client)
     cnn_task = fetch_cnn_fear_greed(http_client)
+    sse_task = fetch_sse_index(http_client)
 
-    sp500_data, hstech_data, cnn_data = await asyncio.gather(
-        sp500_task, hstech_task, cnn_task, return_exceptions=True
+    sp500_data, hstech_data, cnn_data, sse_data = await asyncio.gather(
+        sp500_task, hstech_task, cnn_task, sse_task, return_exceptions=True
     )
 
     if isinstance(sp500_data, Exception):
@@ -239,8 +297,13 @@ async def get_investment_snapshot(http_client: httpx.AsyncClient) -> InvestmentS
             history=[],
         )
 
+    if isinstance(sse_data, Exception):
+        logger.error(f"SSE task failed: {sse_data}")
+        sse_data = SSEIndexData()
+
     return InvestmentSnapshotData(
         cnn_fear_greed=cnn_data,
         sp500=sp500_data,
         hstech=hstech_data,
+        sse=sse_data,
     )
